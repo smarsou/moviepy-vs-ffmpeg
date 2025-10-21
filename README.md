@@ -1,0 +1,1 @@
+<img src=".github\static\perf.png" width="800"/>
