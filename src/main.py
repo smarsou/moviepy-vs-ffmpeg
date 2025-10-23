@@ -29,8 +29,8 @@ class FFMPEG():
 
     def cut_out_video(self, input_path: Path, subclip_times : List[Tuple[(float,float)]], output : Path) -> float:
         chrono_start = time.time()
-        filter_chains = "[0:v]trim=start={0}:end={1},setpts=PTS-STARTPTS[v{2}]; [0:a]atrim=start={0}:end={1},asetpts=PTS-STARTPTS[a{2}];"
-        filter_graph = "\n".join([filter_chains.format(cpl[0],cpl[1],i+1) for i,cpl in enumerate(subclip_times)])
+        filter_chain = "[0:v]trim=start={0}:end={1},setpts=PTS-STARTPTS[v{2}]; [0:a]atrim=start={0}:end={1},asetpts=PTS-STARTPTS[a{2}];"
+        filter_graph = "\n".join([filter_chain.format(cpl[0],cpl[1],i+1) for i,cpl in enumerate(subclip_times)])
         filter_graph +=  "\n" + "".join([f"[v{i+1}][a{i+1}]" for i in range(len(subclip_times))])
         filter_graph += f"concat=n={len(subclip_times)}:v=1:a=1[outv][outa]"
         cmd = [FFMPEG_BINARY,'-i', f'{input_path}', '-filter_complex', filter_graph, 
@@ -44,20 +44,18 @@ class FFMPEG():
     
     def cut_out_video_without_transcoding_using_copy_paramter(self, input_path: Path, subclip_times : List[Tuple[(float,float)]], output : Path, tmpdir) -> float:
         chrono_start = time.time()
-        filter_chains = "[0:v]trim=start={0}:end={1},setpts=PTS-STARTPTS[v{2}]; [0:a]atrim=start={0}:end={1},asetpts=PTS-STARTPTS[a{2}];"
-        filter_graph = "\n".join([filter_chains.format(cpl[0],cpl[1],i+1) for i,cpl in enumerate(subclip_times)])
-        filter_graph +=  "\n" + "".join([f"[v{i+1}][a{i+1}]" for i in range(len(subclip_times))])
-        filter_graph += f"concat=n={len(subclip_times)}:v=1:a=1[outv][outa]"
         list_of_files = []
+        # Create subclips and write them in separate files
         for i,cpl in enumerate(subclip_times):
             file_name = str(os.path.join(tmpdir,"output"+"_"+str(i)+".mp4"))
             list_of_files.append(file_name)
             cmd = [FFMPEG_BINARY,'-ss', str(cpl[0]),'-to', str(cpl[1]),'-i', f'{input_path}', '-c','copy', file_name, '-y']
             subprocess.run(cmd, stdout=subprocess.DEVNULL)
+        # Write all the sublcips' filepath in a file 'liste.txt'
         with open(os.path.join(tmpdir,"liste.txt"), "w") as f:
             for file_name in list_of_files:
                 f.write("file '" + file_name + "'\n")
-
+        # Concate all the subclips in one output
         subprocess.run([FFMPEG_BINARY, '-f', 'concat', '-safe', "0", '-i', str(os.path.join(tmpdir,"liste.txt")), "-c", "copy", output ,"-y"], stdout=subprocess.DEVNULL)
         chrono_count = time.time() - chrono_start
         return chrono_count
